@@ -1,158 +1,154 @@
-#include <iostream>
-#include <vector>
-#include <cstdlib>
-#include <ctime>
-#include <chrono>
-#include <thread>
+// Inclusión de bibliotecas necesarias
+#include <iostream>     // Para entrada/salida estándar
+#include <ctime>        // Para generar semilla aleatoria
+#include <cstdlib>      // Para funciones rand() y srand()
+#include <vector>       // Para usar vectores dinámicos
+#include <stack>        // Para la resolución del laberinto (aunque no se usa directamente)
 
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <unistd.h>
-#endif
+// Uso del espacio de nombres estándar
+using namespace std;
 
-const char MURO = '\u2588';
-const char CAMINO = '.';
-const char CURSOR = '*';
+// Definición de constantes para representar los elementos del laberinto
+const int PARED = 1;
+const int CAMINO = 0;
+const int SOLUCION = 2;
+const int ENTRADA = 3;
+const int SALIDA = 4;
 
-class Laberinto {
-private:
-    std::vector<std::vector<char>> grid;
-    int ancho, alto;
-
-    void limpiar_pantalla() {
-#ifdef _WIN32
-        system("cls");
-#else
-        system("clear");
-#endif
-    }
-
-    bool es_valido(int x, int y) {
-        return x >= 0 && x < ancho && y >= 0 && y < alto;
-    }
-
-    void crear_camino(int x, int y) {
-        std::vector<std::vector<int>> direcciones = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-        std::vector<int> orden_dir = {0, 1, 2, 3};
-        grid[y][x] = CAMINO;
-
-        for (int i = 3; i > 0; i--) {
-            int j = rand() % (i + 1);
-            std::swap(orden_dir[i], orden_dir[j]);
+// Función para imprimir el laberinto
+void pintar(int alto, int largo, vector<vector<int>>& matriz) {
+    for (int i = 0; i < alto; i++) {
+        for (int j = 0; j < largo; j++) {
+            // Imprime diferentes caracteres según el tipo de celda
+            switch(matriz[i][j]) {
+                case PARED: cout << "█"; break;     // Pared
+                case CAMINO: cout << " "; break;    // Camino libre
+                case SOLUCION: cout << "·"; break;  // Parte de la solución
+                case ENTRADA: cout << "E"; break;   // Entrada del laberinto
+                case SALIDA: cout << "S"; break;    // Salida del laberinto
+            }
         }
+        cout << endl;  // Nueva línea al final de cada fila
+    }
+}
 
-        for (int i = 0; i < 4; i++) {
-            int nx = x + 2 * direcciones[orden_dir[i]][0];
-            int ny = y + 2 * direcciones[orden_dir[i]][1];
-            if (es_valido(nx, ny) && grid[ny][nx] == MURO) {
-                grid[y + direcciones[orden_dir[i]][1]][x + direcciones[orden_dir[i]][0]] = CAMINO;
+// Función para generar el laberinto
+vector<vector<int>> generarLab(int largo, int alto, float densidad) {
+    int FParedes = densidad * 8;  // Factor de paredes
+    int numParedes = densidad * (largo * alto) / 4;  // Número total de paredes a generar
+    cout << "Alto: " << alto << " Largo: " << largo << "\n";
+    cout << "FParedes: " << FParedes << " Densidad: " << numParedes << "\n";
 
-                limpiar_pantalla();
-                grid[ny][nx] = CURSOR;
-                imprimir_laberinto();
-                grid[ny][nx] = MURO;
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                crear_camino(nx, ny);
+    // Inicializar la matriz del laberinto con caminos
+    vector<vector<int>> matriz(alto, vector<int>(largo, CAMINO));
+
+    // Crear bordes del laberinto
+    for (int i = 0; i < alto; i++) {
+        for (int j = 0; j < largo; j++) {
+            if (i == 0 || i == alto - 1 || j == 0 || j == largo - 1) {
+                matriz[i][j] = PARED;
             }
         }
     }
 
-    void imprimir_caracter_en_color(char c, int color_code) {
-        // Cambiar el color del texto usando códigos ANSI
-#ifdef _WIN32
-        HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-        SetConsoleTextAttribute(hConsole, color_code);  // Cambiar el color del texto en Windows
-        std::cout << c;
-#else
-        std::cout << "\033[38;5;" << color_code << "m" << c << "\033[0m";  // Cambiar el color del texto en Unix/Linux
-#endif
-    }
+    // Generar paredes aleatorias
+    srand(time(NULL));  // Inicializar la semilla aleatoria
+    for (int i = 0; i < numParedes; i++) {
+        // Seleccionar una posición aleatoria (siempre par para mantener simetría)
+        int x = rand() % (largo - 3) + 2;
+        x = (x / 2) * 2;
+        int y = rand() % (alto - 3) + 2;
+        y = (y / 2) * 2;
+        matriz[y][x] = PARED;
 
-public:
-    Laberinto(int w, int h) : ancho(w), alto(h) {
-        grid = std::vector<std::vector<char>>(alto, std::vector<char>(ancho, MURO));
-    }
+        // Generar paredes adicionales alrededor de la pared inicial
+        for (int j = 0; j < FParedes; j++) {
+            int px[4] = { x + 2, x - 2, x, x };
+            int py[4] = { y, y, y + 2, y - 2 };
+            int p = rand() % 4;
 
-    void imprimir_laberinto() {
-        for (const auto& fila : grid) {
-            for (char celda : fila) {
-                if (celda == MURO) {
-                    imprimir_caracter_en_color(MURO, 9);  // Código de color 9 para el color rosa (magenta)
-                } else if (celda == CAMINO) {
-                    std::cout << CAMINO;
-                } else if (celda == CURSOR) {
-                    imprimir_caracter_en_color(CURSOR, 9);  // Código de color 9 para el color rosa (magenta)
-                }
+            // Verificar si la nueva pared está dentro de los límites y en un camino
+            if (px[p] >= 0 && px[p] < largo && py[p] >= 0 && py[p] < alto && matriz[py[p]][px[p]] == CAMINO) {
+                matriz[py[p]][px[p]] = PARED;
+                matriz[(py[p] + y) / 2][(px[p] + x) / 2] = PARED;
             }
-            std::cout << '\n';
         }
     }
 
-    void generar_laberinto() {
-        srand(time(nullptr));
+    // Establecer entrada y salida
+    matriz[1][1] = ENTRADA;
+    matriz[alto-2][largo-2] = SALIDA;
 
-        grid[0][1] = CAMINO;
-        grid[alto - 1][ancho - 2] = CAMINO;
-        crear_camino(1, 1);
+    return matriz;
+}
+
+// Función recursiva para resolver el laberinto
+bool resolverLaberinto(vector<vector<int>>& laberinto, int x, int y) {
+    // Si llegamos a la salida, hemos resuelto el laberinto
+    if (laberinto[y][x] == SALIDA) {
+        return true;
     }
 
-    bool resolver_laberinto(int x, int y) {
-        grid[y][x] = CURSOR;
-
-        if (x == ancho - 2 && y == alto - 1) {
-            limpiar_pantalla();
-            imprimir_laberinto();
-            return true;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        limpiar_pantalla();
-        imprimir_laberinto();
-
-        if (es_valido(x + 1, y) && grid[y][x + 1] == CAMINO && resolver_laberinto(x + 1, y)) {
-            return true;
-        }
-        if (es_valido(x, y + 1) && grid[y + 1][x] == CAMINO && resolver_laberinto(x, y + 1)) {
-            return true;
-        }
-        if (es_valido(x - 1, y) && grid[y][x - 1] == CAMINO && resolver_laberinto(x - 1, y)) {
-            return true;
-        }
-        if (es_valido(x, y - 1) && grid[y - 1][x] == CAMINO && resolver_laberinto(x, y - 1)) {
-            return true;
-        }
-
-        grid[y][x] = CAMINO;
+    // Si encontramos una pared o ya hemos pasado por aquí, retrocedemos
+    if (laberinto[y][x] == PARED || laberinto[y][x] == SOLUCION) {
         return false;
     }
-};
 
-int main() {
-    int ancho, alto;
-
-    // Solicitar dimensiones del laberinto
-    std::cout << "Ingrese el ancho del laberinto: ";
-    std::cin >> ancho;
-    std::cout << "Ingrese la altura del laberinto: ";
-    std::cin >> alto;
-
-    // Asegurar dimensiones impares
-    if (ancho % 2 == 0) ancho++;
-    if (alto % 2 == 0) alto++;
-
-    // Generar y mostrar el laberinto
-    Laberinto lab(ancho, alto);
-    lab.generar_laberinto();
-    lab.imprimir_laberinto();
-
-    // Resolver el laberinto
-    std::cout << "\nResolviendo laberinto...\n";
-    if (lab.resolver_laberinto(1, 1)) {
-        std::cout << "\nLaberinto resuelto!\n";
-    } else {
-        std::cout << "\nNo se pudo resolver el laberinto.\n";
+    // Marcar el camino actual como parte de la solución
+    if (laberinto[y][x] != ENTRADA) {
+        laberinto[y][x] = SOLUCION;
     }
 
+    // Definir los movimientos posibles (arriba, derecha, abajo, izquierda)
+    int dx[] = {0, 1, 0, -1};
+    int dy[] = {-1, 0, 1, 0};
+
+    // Intentar moverse en todas las direcciones
+    for (int i = 0; i < 4; i++) {
+        int nx = x + dx[i];
+        int ny = y + dy[i];
+        if (resolverLaberinto(laberinto, nx, ny)) {
+            return true;  // Si encontramos una solución, propagamos el éxito
+        }
+    }
+
+    // Si no encontramos solución desde aquí, desmarcamos y retrocedemos
+    if (laberinto[y][x] != ENTRADA) {
+        laberinto[y][x] = CAMINO;
+    }
+    return false;
+}
+
+// Función principal
+int main() {
+    int largo, alto;
+    float densidad;
+
+    // Solicitar dimensiones y densidad del laberinto al usuario
+    cout << "Ingrese el largo del laberinto: ";
+    cin >> largo;
+    cout << "Ingrese el alto del laberinto: ";
+    cin >> alto;
+    cout << "Ingrese la densidad del laberinto (0.0 - 1.0): ";
+    cin >> densidad;
+
+    // Generar el laberinto
+    vector<vector<int>> laberinto = generarLab(largo, alto, densidad);
+    
+    // Mostrar el laberinto generado
+    cout << "\nLaberinto generado:\n";
+    pintar(alto, largo, laberinto);
+    
+    // Intentar resolver el laberinto
+    cout << "\nResolviendo el laberinto...\n";
+    if (resolverLaberinto(laberinto, 1, 1)) {
+        cout << "Solución encontrada:\n";
+        pintar(alto, largo, laberinto);
+    } else {
+        cout << "No se encontró solución.\n";
+    }
+    
+    // Pausar la consola antes de cerrar (útil en Windows)
+    system("pause");
     return 0;
 }
